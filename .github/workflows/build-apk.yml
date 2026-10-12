@@ -34,7 +34,6 @@ steps:
     shell: bash
     run: |
       set -euo pipefail
-
       ZIP_FILE="$(find . -maxdepth 1 -type f -name '*.zip' | head -n 1)"
 
       if [ -z "$ZIP_FILE" ]; then
@@ -45,9 +44,7 @@ steps:
       mkdir -p "$GITHUB_WORKSPACE/darik-project"
       unzip -q "$ZIP_FILE" -d "$GITHUB_WORKSPACE/darik-project"
 
-      SETTINGS_FILE="$(find "$GITHUB_WORKSPACE/darik-project" \
-        -type f \( -name settings.gradle -o -name settings.gradle.kts \) \
-        -print -quit)"
+      SETTINGS_FILE="$(find "$GITHUB_WORKSPACE/darik-project" -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)"
 
       if [ -z "$SETTINGS_FILE" ]; then
         echo "ERROR: settings.gradle was not found in the ZIP."
@@ -56,17 +53,13 @@ steps:
 
       PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
       echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-      echo "Project directory: $PROJECT_DIR"
 
   - name: Verify Android project
     shell: bash
     run: |
       set -euo pipefail
-      test -f "$PROJECT_DIR/build.gradle" \
-        -o -f "$PROJECT_DIR/build.gradle.kts"
-      test -f "$PROJECT_DIR/app/build.gradle" \
-        -o -f "$PROJECT_DIR/app/build.gradle.kts"
       test -f "$PROJECT_DIR/app/src/main/AndroidManifest.xml"
+      test -f "$PROJECT_DIR/app/build.gradle" -o -f "$PROJECT_DIR/app/build.gradle.kts"
 
   - name: Build debug APK
     shell: bash
