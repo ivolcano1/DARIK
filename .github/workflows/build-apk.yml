@@ -5,8 +5,6 @@ name: Darik Build Test
 
 jobs:
   test:
-    name: Check Workflow
     runs-on: ubuntu-latest
     steps:
-      - name: Confirm workflow works
-        run: echo "Workflow syntax is valid"
+      - run: echo "Workflow works"
