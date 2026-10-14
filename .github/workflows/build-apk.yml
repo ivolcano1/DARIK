@@ -2,12 +2,6 @@ name: Build Darik APK
 
 on:
 workflow_dispatch:
-push:
-branches:
-- main
-paths:
-- '*.zip'
-- '.github/workflows/build-apk.yml'
 
 permissions:
 contents: read
@@ -21,7 +15,7 @@ steps:
   - name: Checkout repository
     uses: actions/checkout@v4
 
-  - name: Set up JDK 17
+  - name: Set up Java 17
     uses: actions/setup-java@v4
     with:
       distribution: temurin
@@ -30,45 +24,40 @@ steps:
   - name: Set up Gradle
     uses: gradle/actions/setup-gradle@v4
 
-  - name: Find and extract Darik ZIP
+  - name: Locate project ZIP
     shell: bash
     run: |
       set -euo pipefail
       ZIP_FILE="$(find . -maxdepth 1 -type f -name '*.zip' | head -n 1)"
-
       if [ -z "$ZIP_FILE" ]; then
-        echo "ERROR: No project ZIP found in repository root."
+        echo "ERROR: No ZIP file found in repository root."
         exit 1
       fi
-
       mkdir -p "$GITHUB_WORKSPACE/darik-project"
       unzip -q "$ZIP_FILE" -d "$GITHUB_WORKSPACE/darik-project"
-
       SETTINGS_FILE="$(find "$GITHUB_WORKSPACE/darik-project" -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)"
-
       if [ -z "$SETTINGS_FILE" ]; then
-        echo "ERROR: settings.gradle was not found in the ZIP."
+        echo "ERROR: settings.gradle not found inside ZIP."
         exit 1
       fi
-
       PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
       echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-  - name: Verify Android project
+  - name: Verify Android files
     shell: bash
     run: |
       set -euo pipefail
       test -f "$PROJECT_DIR/app/src/main/AndroidManifest.xml"
       test -f "$PROJECT_DIR/app/build.gradle" -o -f "$PROJECT_DIR/app/build.gradle.kts"
 
-  - name: Build debug APK
+  - name: Build APK
     shell: bash
     run: |
       set -euo pipefail
       cd "$PROJECT_DIR"
       gradle --no-daemon :app:assembleDebug
 
-  - name: Upload APK artifact
+  - name: Upload APK
     uses: actions/upload-artifact@v4
     with:
       name: Darik-debug-apk
