@@ -35,66 +35,46 @@ jobs:
           ZIP_FILE="Darik-Android-Project-v14-PRO-UI.zip"
 
           if [ ! -f "$ZIP_FILE" ]; then
-            echo "ERROR: Required project ZIP not found: $ZIP_FILE"
-            echo "Files available in repository root:"
+            echo "ERROR: Project ZIP not found: $ZIP_FILE"
             ls -la
             exit 1
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/darik-project"
+          unzip -q "$ZIP_FILE" -d "$GITHUB_WORKSPACE/darik-project"
 
-          unzip -q "$ZIP_FILE" \
-            -d "$GITHUB_WORKSPACE/darik-project"
-
-          SETTINGS_FILE="$(find \
-            "$GITHUB_WORKSPACE/darik-project" \
-            -type f \
-            \( -name settings.gradle \
-               -o -name settings.gradle.kts \) \
-            -print -quit)"
+          SETTINGS_FILE="$(find "$GITHUB_WORKSPACE/darik-project" -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)"
 
           if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: settings.gradle was not found in ZIP."
+            echo "ERROR: settings.gradle not found inside ZIP."
             exit 1
           fi
 
           PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
 
-          if [ ! -f "$PROJECT_DIR/app/build.gradle" ] && \
-             [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERROR: Android app Gradle file not found."
+          if [ ! -f "$PROJECT_DIR/app/build.gradle" ] && [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            echo "ERROR: App Gradle file not found."
             exit 1
           fi
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
           echo "Selected project: $PROJECT_DIR"
-          echo "Selected ZIP: $ZIP_FILE"
 
-      - name: Validate project resources
+      - name: Validate Android project
         shell: bash
         run: |
           set -euo pipefail
-
           cd "$PROJECT_DIR"
 
-          if [ ! -f app/src/main/AndroidManifest.xml ]; then
-            echo "ERROR: AndroidManifest.xml is missing."
-            exit 1
-          fi
+          test -f app/src/main/AndroidManifest.xml
+          test -d app/src/main/res
 
-          if [ ! -d app/src/main/res ]; then
-            echo "ERROR: Android resources directory is missing."
-            exit 1
-          fi
-
-          echo "Basic project validation passed."
+          echo "Project validation passed."
 
       - name: Build debug APK
         shell: bash
         run: |
           set -euo pipefail
-
           cd "$PROJECT_DIR"
 
           gradle --no-daemon :app:assembleDebug
@@ -107,9 +87,7 @@ jobs:
           fi
 
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
-
-          cp "$APK_PATH" \
-            "$GITHUB_WORKSPACE/apk-output/Darik-v14-debug.apk"
+          cp "$APK_PATH" "$GITHUB_WORKSPACE/apk-output/Darik-v14-debug.apk"
 
           echo "APK built successfully."
 
