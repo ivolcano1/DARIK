@@ -2,109 +2,94 @@
 name: Build Darik APK
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
-  workflow_dispatch:
+    paths:
+      - '**.zip'
+      - '.github/workflows/build-apk.yml'
 
 permissions:
   contents: read
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Set up Java 17
+      - name: Set up Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
+      - name: Select latest Darik project ZIP
+        id: project
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP_FILE="$(find . -maxdepth 1 -type f \
+            -name 'Darik-Android-Project-v*.zip' \
+            ! -name '*-OLD.zip' \
+            ! -name '*-FIXED.zip' \
+            ! -name '*-UI-FIX.zip' \
+            ! -name '*-PHOTO-FIX.zip' \
+            | sort -V | tail -n 1)"
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No Darik project ZIP found."
+            exit 1
+          fi
+
+          echo "Selected project: $ZIP_FILE"
+          echo "zip_file=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Extract project
+        run: |
+          set -euo pipefail
+          mkdir -p project
+          unzip -q "${{ steps.project.outputs.zip_file }}" -d project
+
+      - name: Locate Android project
+        id: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          GRADLE_FILE="$(find project -name gradlew -type f | head -n 1)"
+          if [ -z "$GRADLE_FILE" ]; then
+            echo "Could not find gradlew in the ZIP."
+            find project -maxdepth 3 -type f | head -n 80
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$GRADLE_FILE")"
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          chmod +x "$GRADLE_FILE"
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Locate and extract Darik project
+      - name: Build APK
+        working-directory: ${{ steps.android.outputs.project_dir }}
+        run: ./gradlew --no-daemon :app:assembleDebug
+
+      - name: Prepare APK artifact
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p output
+          find project -type f -path '*/app/build/outputs/apk/debug/*.apk' \
+            -exec cp {} output/Darik-debug.apk \;
+          test -f output/Darik-debug.apk
 
-          ZIP_FILE="$(find . -maxdepth 1 -type f \
-            -name 'Darik-Android-Project-v*.zip' \
-            -printf '%f\n' | sort -V | tail -n 1)"
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No Darik project ZIP found in repository root."
-            ls -la
-            exit 1
-          fi
-
-          echo "Using project: $ZIP_FILE"
-
-          mkdir -p "$GITHUB_WORKSPACE/darik-project"
-          unzip -q "$ZIP_FILE" -d "$GITHUB_WORKSPACE/darik-project"
-
-          SETTINGS_FILE="$(find "$GITHUB_WORKSPACE/darik-project" \
-            -type f \( -name settings.gradle \
-            -o -name settings.gradle.kts \) -print -quit)"
-
-          if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: Gradle settings file not found in ZIP."
-            exit 1
-          fi
-
-          PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
-
-          if [ ! -f "$PROJECT_DIR/app/build.gradle" ] && \
-             [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERROR: App Gradle file not found."
-            exit 1
-          fi
-
-          VERSION="$(printf '%s' "$ZIP_FILE" |
-            sed -nE 's/.*-v([0-9]+).*/\1/p')"
-
-          if [ -z "$VERSION" ]; then VERSION="latest"; fi
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "DARIK_VERSION=$VERSION" >> "$GITHUB_ENV"
-
-      - name: Validate Android project
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$PROJECT_DIR"
-          test -f app/src/main/AndroidManifest.xml
-          test -d app/src/main/res
-          echo "Project validation passed."
-
-      - name: Build debug APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$PROJECT_DIR"
-
-          gradle --no-daemon :app:assembleDebug
-
-          APK_PATH="app/build/outputs/apk/debug/app-debug.apk"
-
-          if [ ! -f "$APK_PATH" ]; then
-            echo "ERROR: APK was not generated."
-            exit 1
-          fi
-
-          mkdir -p "$GITHUB_WORKSPACE/apk-output"
-          cp "$APK_PATH" \
-            "$GITHUB_WORKSPACE/apk-output/Darik-v${DARIK_VERSION}-debug.apk"
-
-      - name: Upload Darik APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Darik-v${{ env.DARIK_VERSION }}-debug-apk
-          path: apk-output/Darik-v${{ env.DARIK_VERSION }}-debug.apk
+          name: Darik-APK
+          path: output/Darik-debug.apk
           if-no-files-found: error
-          retention-days: 14
           
